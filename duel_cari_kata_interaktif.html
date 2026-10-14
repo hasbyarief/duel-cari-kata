@@ -1,0 +1,716 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Duel Cari Kata Interaktif</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@500;700;800;900&display=swap" rel="stylesheet">
+    
+    <style>
+        * {
+            touch-action: manipulation;
+            user-select: none;
+            -webkit-user-select: none;
+        }
+
+        body {
+            font-family: 'Plus Jakarta Sans', sans-serif;
+            background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%);
+            color: #f8fafc;
+            min-height: 100vh;
+            margin: 0;
+            padding: 0;
+            overflow-x: hidden;
+        }
+
+        /* Grid styling */
+        .grid-container {
+            display: grid;
+            grid-template-columns: repeat(10, 1fr);
+            gap: 3px;
+            padding: 6px;
+            border-radius: 12px;
+            box-shadow: inset 0 2px 8px rgba(0, 0, 0, 0.2);
+            touch-action: none; /* Prevents scroll while dragging on grid */
+        }
+
+        .grid-cell {
+            aspect-ratio: 1 / 1;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            font-size: clamp(10px, 2.2vw, 18px);
+            font-weight: 800;
+            border-radius: 6px;
+            cursor: pointer;
+            transition: transform 0.1s ease, background-color 0.15s ease, color 0.15s ease;
+        }
+
+        .grid-cell:active {
+            transform: scale(0.92);
+        }
+
+        /* Player 1 Theme (Cyan / Blue) */
+        .p1-theme .grid-container { background-color: #0c4a6e; border: 2px solid #0284c7; }
+        .p1-theme .grid-cell { background-color: #0369a1; color: #e0f2fe; }
+        .p1-theme .grid-cell.selected { background-color: #38bdf8 !important; color: #032830 !important; transform: scale(1.05); }
+        .p1-theme .grid-cell.found { background-color: #10b981 !important; color: #022c22 !important; font-weight: 900; box-shadow: 0 0 8px rgba(16, 185, 129, 0.8); animation: found-pop 0.35s ease-out; }
+
+        /* Player 2 Theme (Rose / Red) */
+        .p2-theme .grid-container { background-color: #881337; border: 2px solid #e11d48; }
+        .p2-theme .grid-cell { background-color: #be123c; color: #ffe4e6; }
+        .p2-theme .grid-cell.selected { background-color: #fb7185 !important; color: #4c0519 !important; transform: scale(1.05); }
+        .p2-theme .grid-cell.found { background-color: #f59e0b !important; color: #451a03 !important; font-weight: 900; box-shadow: 0 0 8px rgba(245, 158, 11, 0.8); animation: found-pop 0.35s ease-out; }
+
+        @keyframes found-pop {
+            0% { transform: scale(0.85); opacity: 0.6; }
+            50% { transform: scale(1.15); }
+            100% { transform: scale(1); opacity: 1; }
+        }
+
+        .word-item {
+            transition: all 0.25s ease;
+        }
+
+        .word-item.completed {
+            text-decoration: line-through;
+            opacity: 0.45;
+            transform: scale(0.96);
+            background-color: rgba(255, 255, 255, 0.08) !important;
+        }
+
+        /* Glassmorphism Cards */
+        .glass-card {
+            background: rgba(30, 41, 59, 0.7);
+            backdrop-filter: blur(12px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        /* Confetti Canvas */
+        #confetti-canvas {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100vw;
+            height: 100vh;
+            pointer-events: none;
+            z-index: 120;
+        }
+    </style>
+</head>
+<body class="flex flex-col h-screen overflow-hidden">
+    <!-- Confetti Canvas -->
+    <canvas id="confetti-canvas"></canvas>
+
+    <!-- Header Navigation -->
+    <header class="glass-card z-50 px-4 py-3 flex items-center justify-between border-b border-slate-700/60 shrink-0">
+        <div class="flex items-center gap-2 sm:gap-3">
+            <button onclick="openResetModal()" class="bg-slate-800 hover:bg-slate-700 text-slate-200 font-bold py-2 px-3 sm:px-4 rounded-xl flex items-center gap-2 transition-all text-xs sm:text-sm border border-slate-600/50 shadow-sm active:scale-95">
+                <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/>
+                    <path d="M3 3v5h5"/>
+                </svg>
+                <span class="hidden sm:inline">Reset</span>
+            </button>
+
+            <button id="fullscreen-btn" onclick="toggleFullscreen()" class="bg-slate-800 hover:bg-slate-700 text-slate-200 font-bold py-2 px-3 sm:px-4 rounded-xl flex items-center gap-2 transition-all text-xs sm:text-sm border border-slate-600/50 shadow-sm active:scale-95">
+                <svg id="fs-icon" xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"/>
+                </svg>
+                <span id="fs-text" class="hidden md:inline">Layar Penuh</span>
+            </button>
+
+            <button id="sound-btn" onclick="toggleSound()" class="bg-slate-800 hover:bg-slate-700 text-slate-200 p-2 rounded-xl border border-slate-600/50 transition-all active:scale-95" title="Toggle Sound">
+                <svg id="sound-icon" xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                    <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon>
+                    <path d="M19.07 4.93a10 10 0 0 1 0 14.14M15.54 8.46a5 5 0 0 1 0 7.07"></path>
+                </svg>
+            </button>
+        </div>
+
+        <div class="text-center">
+            <h1 class="text-sm sm:text-lg font-black tracking-wider uppercase text-emerald-400">
+                DUEL CARI KATA
+            </h1>
+            <div class="flex items-center justify-center gap-2 mt-0.5">
+                <select id="category-select" onchange="changeCategory(this.value)" class="text-xs font-bold bg-slate-800 text-slate-200 border border-slate-600 rounded-lg px-2 py-1 focus:outline-none focus:ring-2 focus:ring-emerald-500 cursor-pointer">
+                    <option value="hewan">🦁 Hewan (Animals)</option>
+                    <option value="buah">🍎 Buah-buahan (Fruits)</option>
+                    <option value="kelas">🏫 Benda di Kelas (Classroom)</option>
+                    <option value="makanan">🍕 Makanan (Foods)</option>
+                    <option value="transportasi">🚗 Transportasi (Transport)</option>
+                    <option value="olahraga">⚽ Olahraga & Hobi (Sports)</option>
+                    <option value="bulan">📅 Nama Bulan (Months)</option>
+                    <option value="planet">🪐 Nama Planet (Planets)</option>
+                </select>
+            </div>
+        </div>
+
+        <div id="game-status" class="text-xs sm:text-sm font-bold bg-slate-800/80 px-3 py-1.5 rounded-xl border border-slate-700 text-emerald-300">
+            P1 vs P2
+        </div>
+    </header>
+
+    <!-- Main Game Board (Split Screen) -->
+    <main class="flex-1 flex flex-col md:flex-row p-2 sm:p-4 gap-3 sm:gap-4 overflow-hidden relative">
+        <!-- PLAYER 1 SECTION (BLUE / CYAN) -->
+        <section id="p1-section" class="flex-1 flex flex-col glass-card rounded-2xl p-3 sm:p-4 border-2 border-sky-500/40 p1-theme overflow-hidden relative">
+            <div class="flex items-center justify-between mb-2">
+                <div class="flex items-center gap-2">
+                    <span class="w-3 h-3 rounded-full bg-sky-400 animate-pulse"></span>
+                    <h2 class="font-black text-lg sm:text-xl text-sky-300 tracking-wide uppercase">PEMAIN 1</h2>
+                </div>
+                <div id="p1-score" class="font-black text-sm sm:text-base bg-sky-950/80 text-sky-200 px-3 py-1 rounded-xl border border-sky-500/30">
+                    0 / 10
+                </div>
+            </div>
+
+            <div class="flex flex-1 flex-col xl:flex-row gap-3 overflow-hidden items-center justify-center">
+                <!-- Grid Container P1 -->
+                <div id="p1-grid-container" class="grid-container w-full max-w-[380px] xl:max-w-[420px] aspect-square">
+                    <!-- Dynamic grid elements -->
+                </div>
+
+                <!-- Word List P1 -->
+                <div class="w-full xl:w-44 flex xl:flex-col flex-wrap gap-1.5 overflow-y-auto max-h-28 xl:max-h-none p-1" id="p1-word-list">
+                    <!-- Word tags -->
+                </div>
+            </div>
+        </section>
+
+        <!-- PLAYER 2 SECTION (ROSE / RED) -->
+        <section id="p2-section" class="flex-1 flex flex-col glass-card rounded-2xl p-3 sm:p-4 border-2 border-rose-500/40 p2-theme overflow-hidden relative">
+            <div class="flex items-center justify-between mb-2">
+                <div class="flex items-center gap-2">
+                    <span class="w-3 h-3 rounded-full bg-rose-400 animate-pulse"></span>
+                    <h2 class="font-black text-lg sm:text-xl text-rose-300 tracking-wide uppercase">PEMAIN 2</h2>
+                </div>
+                <div id="p2-score" class="font-black text-sm sm:text-base bg-rose-950/80 text-rose-200 px-3 py-1 rounded-xl border border-rose-500/30">
+                    0 / 10
+                </div>
+            </div>
+
+            <div class="flex flex-1 flex-col xl:flex-row gap-3 overflow-hidden items-center justify-center">
+                <!-- Grid Container P2 -->
+                <div id="p2-grid-container" class="grid-container w-full max-w-[380px] xl:max-w-[420px] aspect-square">
+                    <!-- Dynamic grid elements -->
+                </div>
+
+                <!-- Word List P2 -->
+                <div class="w-full xl:w-44 flex xl:flex-col flex-wrap gap-1.5 overflow-y-auto max-h-28 xl:max-h-none p-1" id="p2-word-list">
+                    <!-- Word tags -->
+                </div>
+            </div>
+        </section>
+    </main>
+
+    <!-- Victory Modal -->
+    <div id="victory-modal" class="hidden fixed inset-0 bg-slate-950/80 backdrop-blur-md flex items-center justify-center z-[110] p-4">
+        <div class="glass-card rounded-3xl p-6 sm:p-8 max-w-md w-full text-center shadow-2xl border border-slate-700/80 flex flex-col items-center">
+            <div class="text-6xl mb-3 animate-bounce">🏆</div>
+            <h2 id="winner-title" class="text-3xl sm:text-4xl font-black text-amber-400 mb-2 uppercase tracking-tight">PEMAIN 1 MENANG!</h2>
+            <p id="winner-sub" class="text-slate-300 text-sm sm:text-base mb-6 font-medium">Luar biasa! Kamu berhasil menemukan semua kata lebih cepat.</p>
+            <button onclick="resetGame()" class="w-full py-3.5 bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-600 hover:to-teal-700 text-white font-black text-lg rounded-2xl shadow-lg transition-transform active:scale-95">
+                Main Lagi 🔄
+            </button>
+        </div>
+    </div>
+
+    <!-- Reset Modal -->
+    <div id="reset-modal" class="hidden fixed inset-0 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center z-[110] p-4">
+        <div class="glass-card rounded-3xl p-6 sm:p-8 max-w-sm w-full text-center shadow-2xl border border-slate-700/80">
+            <h3 class="text-2xl font-black text-slate-100 mb-2">Mulai Ulang Duel?</h3>
+            <p class="text-slate-400 text-sm mb-6">Grid kata dan skor kedua pemain akan diperbarui dari awal.</p>
+            <div class="flex gap-3">
+                <button onclick="closeResetModal()" class="flex-1 py-3 bg-slate-800 text-slate-300 font-bold rounded-xl hover:bg-slate-700 transition-colors">
+                    Batal
+                </button>
+                <button onclick="confirmReset()" class="flex-1 py-3 bg-rose-600 text-white font-bold rounded-xl hover:bg-rose-700 transition-colors shadow-lg shadow-rose-600/30">
+                    Ya, Reset
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // --- Web Audio Synthesizer ---
+        let soundEnabled = true;
+        let audioCtx = null;
+
+        function getAudioContext() {
+            if (!audioCtx) {
+                const AudioContext = window.AudioContext || window.webkitAudioContext;
+                if (AudioContext) audioCtx = new AudioContext();
+            }
+            if (audioCtx && audioCtx.state === 'suspended') {
+                audioCtx.resume();
+            }
+            return audioCtx;
+        }
+
+        function playSound(type) {
+            if (!soundEnabled) return;
+            const ctx = getAudioContext();
+            if (!ctx) return;
+
+            try {
+                const now = ctx.currentTime;
+                if (type === 'select') {
+                    const osc = ctx.createOscillator();
+                    const gain = ctx.createGain();
+                    osc.type = 'sine';
+                    osc.frequency.setValueAtTime(440, now);
+                    osc.frequency.exponentialRampToValueAtTime(580, now + 0.05);
+                    gain.gain.setValueAtTime(0.1, now);
+                    gain.gain.exponentialRampToValueAtTime(0.01, now + 0.05);
+                    osc.connect(gain);
+                    gain.connect(ctx.destination);
+                    osc.start(now);
+                    osc.stop(now + 0.05);
+                } else if (type === 'found') {
+                    [523.25, 659.25, 783.99].forEach((freq, idx) => {
+                        const osc = ctx.createOscillator();
+                        const gain = ctx.createGain();
+                        const time = now + (idx * 0.07);
+                        osc.type = 'triangle';
+                        osc.frequency.setValueAtTime(freq, time);
+                        gain.gain.setValueAtTime(0.2, time);
+                        gain.gain.exponentialRampToValueAtTime(0.001, time + 0.25);
+                        osc.connect(gain);
+                        gain.connect(ctx.destination);
+                        osc.start(time);
+                        osc.stop(time + 0.25);
+                    });
+                } else if (type === 'win') {
+                    [392.00, 523.25, 659.25, 783.99, 1046.50].forEach((freq, idx) => {
+                        const osc = ctx.createOscillator();
+                        const gain = ctx.createGain();
+                        const time = now + (idx * 0.09);
+                        osc.type = 'sine';
+                        osc.frequency.setValueAtTime(freq, time);
+                        gain.gain.setValueAtTime(0.25, time);
+                        gain.gain.exponentialRampToValueAtTime(0.001, time + 0.4);
+                        osc.connect(gain);
+                        gain.connect(ctx.destination);
+                        osc.start(time);
+                        osc.stop(time + 0.4);
+                    });
+                }
+            } catch (e) {
+                console.warn('Audio playback suppressed', e);
+            }
+        }
+
+        function toggleSound() {
+            soundEnabled = !soundEnabled;
+            const btn = document.getElementById('sound-btn');
+            const icon = document.getElementById('sound-icon');
+            if (soundEnabled) {
+                btn.classList.remove('bg-rose-900/40', 'text-rose-400');
+                btn.classList.add('bg-slate-800', 'text-slate-200');
+                icon.innerHTML = `<polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon><path d="M19.07 4.93a10 10 0 0 1 0 14.14M15.54 8.46a5 5 0 0 1 0 7.07"></path>`;
+            } else {
+                btn.classList.remove('bg-slate-800', 'text-slate-200');
+                btn.classList.add('bg-rose-900/40', 'text-rose-400');
+                icon.innerHTML = `<polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon><line x1="23" y1="9" x2="17" y2="15"></line><line x1="17" y1="9" x2="23" y2="15"></line>`;
+            }
+        }
+
+        // --- Categories Data ---
+        const wordCategories = {
+            hewan: ["ANJING", "KUCING", "GAJAH", "SINGA", "HARIMAU", "KUDA", "IKAN", "BEBEK", "KAMBING", "PENYU"],
+            buah: ["APEL", "PISANG", "MANGGA", "JERUK", "ANGGUR", "PEPAYA", "DURIAN", "MELON", "SEMANGKA", "ALPUKAT"],
+            kelas: ["PAPAN", "PENSIL", "SPIDOL", "BANGKU", "MEJA", "BUKU", "PENGGARIS", "TAS", "PROYEKTOR", "PENGHAPUS"],
+            makanan: ["PIZZA", "BURGER", "DONUT", "RAMEN", "PASTA", "KEJU", "COKLAT", "ESKRIM", "NUGGET", "SUSU"],
+            transportasi: ["MOBIL", "MOTOR", "SEPEDA", "KERETA", "KAPAL", "PESAWAT", "HELI", "BUS", "BECAK", "TRUK"],
+            olahraga: ["SEPAKBOLA", "BASKET", "VOLI", "RENANG", "CATUR", "SENAM", "PANAHAN", "SILAT", "TENIS", "LARI"],
+            bulan: ["JANUARI", "FEBRUARI", "MARET", "APRIL", "MEI", "JUNI", "JULI", "AGUSTUS", "OKTOBER", "DESEMBER"],
+            planet: ["MERKURIUS", "VENUS", "BUMI", "MARS", "JUPITER", "SATURNUS", "URANUS", "NEPTUNUS", "PLUTO", "MATAHARI"]
+        };
+
+        const GRID_SIZE = 10;
+        let currentCategory = "hewan";
+        let isGameOver = false;
+
+        function changeCategory(cat) {
+            if (wordCategories[cat]) {
+                currentCategory = cat;
+                resetGame();
+            }
+        }
+
+        function createGameInstance(playerKey, gridContainerId, wordListId, scoreDisplayId) {
+            const container = document.getElementById(gridContainerId);
+            const wordListElement = document.getElementById(wordListId);
+            const scoreDisplay = document.getElementById(scoreDisplayId);
+
+            let grid = [];
+            let foundWords = new Set();
+            let isSelecting = false;
+            let startCell = null;
+            let endCell = null;
+            let cellsElements = [];
+            let wordList = [...wordCategories[currentCategory]];
+
+            const directions = [
+                { dr: 0, dc: 1 },   // Horizontal Right
+                { dr: 1, dc: 0 },   // Vertical Down
+                { dr: 1, dc: 1 },   // Diagonal Down-Right
+                { dr: 1, dc: -1 },  // Diagonal Down-Left
+                { dr: 0, dc: -1 },  // Horizontal Left
+                { dr: -1, dc: 0 },  // Vertical Up
+                { dr: -1, dc: -1 }, // Diagonal Up-Left
+                { dr: -1, dc: 1 }   // Diagonal Up-Right
+            ];
+
+            function randomLetter() {
+                const letters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
+                return letters[Math.floor(Math.random() * letters.length)];
+            }
+
+            function canPlaceWord(word, r, c, dr, dc) {
+                for (let i = 0; i < word.length; i++) {
+                    const nr = r + i * dr;
+                    const nc = c + i * dc;
+                    if (nr < 0 || nr >= GRID_SIZE || nc < 0 || nc >= GRID_SIZE) return false;
+                    if (grid[nr][nc] !== null && grid[nr][nc] !== word[i]) return false;
+                }
+                return true;
+            }
+
+            function placeWord(word, r, c, dr, dc) {
+                for (let i = 0; i < word.length; i++) {
+                    grid[r + i * dr][c + i * dc] = word[i];
+                }
+            }
+
+            function initializeGrid() {
+                grid = Array.from({ length: GRID_SIZE }, () => Array(GRID_SIZE).fill(null));
+                const shuffledWords = [...wordList].sort(() => Math.random() - 0.5);
+
+                for (const word of shuffledWords) {
+                    let attempts = 0;
+                    let placed = false;
+                    while (!placed && attempts < 1500) {
+                        const r = Math.floor(Math.random() * GRID_SIZE);
+                        const c = Math.floor(Math.random() * GRID_SIZE);
+                        const { dr, dc } = directions[Math.floor(Math.random() * directions.length)];
+                        if (canPlaceWord(word, r, c, dr, dc)) {
+                            placeWord(word, r, c, dr, dc);
+                            placed = true;
+                        }
+                        attempts++;
+                    }
+                }
+
+                // Fill remaining empty cells
+                for (let r = 0; r < GRID_SIZE; r++) {
+                    for (let c = 0; c < GRID_SIZE; c++) {
+                        if (grid[r][c] === null) {
+                            grid[r][c] = randomLetter();
+                        }
+                    }
+                }
+            }
+
+            function renderGrid() {
+                container.innerHTML = '';
+                cellsElements = [];
+                for (let r = 0; r < GRID_SIZE; r++) {
+                    for (let c = 0; c < GRID_SIZE; c++) {
+                        const cell = document.createElement('div');
+                        cell.className = 'grid-cell';
+                        cell.dataset.row = r;
+                        cell.dataset.col = c;
+                        cell.dataset.player = playerKey;
+                        cell.textContent = grid[r][c];
+                        container.appendChild(cell);
+                        cellsElements.push(cell);
+                    }
+                }
+            }
+
+            function renderWordList() {
+                scoreDisplay.textContent = `${foundWords.size} / ${wordList.length}`;
+                wordListElement.innerHTML = '';
+                wordList.forEach(word => {
+                    const item = document.createElement('div');
+                    item.className = 'word-item glass-card px-2.5 py-1 rounded-lg text-xs font-bold text-center flex-1 xl:flex-none border border-slate-700/50';
+                    item.id = `${playerKey}-word-${word}`;
+                    item.textContent = word;
+                    if (foundWords.has(word)) {
+                        item.classList.add('completed');
+                    }
+                    wordListElement.appendChild(item);
+                });
+            }
+
+            function getSelectionCoords() {
+                if (!startCell || !endCell) return null;
+
+                const r1 = parseInt(startCell.dataset.row);
+                const c1 = parseInt(startCell.dataset.col);
+                const r2 = parseInt(endCell.dataset.row);
+                const c2 = parseInt(endCell.dataset.col);
+
+                const dr = Math.sign(r2 - r1);
+                const dc = Math.sign(c2 - c1);
+
+                if (dr === 0 && dc === 0) return null;
+
+                const dR_abs = Math.abs(r2 - r1);
+                const dC_abs = Math.abs(c2 - c1);
+                if (dR_abs !== 0 && dC_abs !== 0 && dR_abs !== dC_abs) {
+                    return null; // Not straight line
+                }
+
+                const selectedCells = [];
+                let word = "";
+                let r = r1;
+                let c = c1;
+
+                while (true) {
+                    const cellElement = container.querySelector(`.grid-cell[data-row="${r}"][data-col="${c}"]`);
+                    if (cellElement) {
+                        selectedCells.push(cellElement);
+                        word += cellElement.textContent;
+                    }
+                    if (r === r2 && c === c2) break;
+                    r += dr;
+                    c += dc;
+                }
+
+                return { word, cells: selectedCells };
+            }
+
+            function updateSelection() {
+                cellsElements.forEach(cell => cell.classList.remove('selected'));
+                if (!startCell) return;
+
+                const selection = getSelectionCoords();
+                if (selection) {
+                    selection.cells.forEach(cell => cell.classList.add('selected'));
+                } else {
+                    startCell.classList.add('selected');
+                }
+            }
+
+            function checkSelection(selection) {
+                if (isGameOver || !selection) return;
+
+                const word = selection.word;
+                const reversedWord = word.split('').reverse().join('');
+                let matchedWord = null;
+
+                if (wordList.includes(word) && !foundWords.has(word)) {
+                    matchedWord = word;
+                } else if (wordList.includes(reversedWord) && !foundWords.has(reversedWord)) {
+                    matchedWord = reversedWord;
+                }
+
+                if (matchedWord) {
+                    playSound('found');
+                    foundWords.add(matchedWord);
+
+                    selection.cells.forEach(cell => {
+                        cell.classList.remove('selected');
+                        cell.classList.add('found');
+                    });
+
+                    const tagItem = document.getElementById(`${playerKey}-word-${matchedWord}`);
+                    if (tagItem) tagItem.classList.add('completed');
+
+                    scoreDisplay.textContent = `${foundWords.size} / ${wordList.length}`;
+
+                    if (foundWords.size === wordList.length) {
+                        triggerWin(playerKey);
+                    }
+                } else {
+                    setTimeout(() => {
+                        cellsElements.forEach(cell => cell.classList.remove('selected'));
+                    }, 200);
+                }
+            }
+
+            function setupPointerEvents() {
+                const handlePointerDown = (e) => {
+                    if (isGameOver) return;
+                    getAudioContext();
+                    const target = e.target.closest('.grid-cell');
+                    if (!target || !container.contains(target)) return;
+
+                    isSelecting = true;
+                    startCell = target;
+                    endCell = target;
+                    playSound('select');
+                    updateSelection();
+                };
+
+                const handlePointerMove = (e) => {
+                    if (!isSelecting || isGameOver) return;
+                    let clientX = e.clientX;
+                    let clientY = e.clientY;
+
+                    if (e.touches && e.touches.length > 0) {
+                        // Find touch matching this pointer
+                        for (let i = 0; i < e.touches.length; i++) {
+                            const touch = e.touches[i];
+                            const el = document.elementFromPoint(touch.clientX, touch.clientY);
+                            if (el && container.contains(el)) {
+                                clientX = touch.clientX;
+                                clientY = touch.clientY;
+                                break;
+                            }
+                        }
+                    }
+
+                    const target = document.elementFromPoint(clientX, clientY);
+                    const cell = target ? target.closest('.grid-cell') : null;
+
+                    if (cell && container.contains(cell) && cell !== endCell) {
+                        endCell = cell;
+                        updateSelection();
+                    }
+                };
+
+                const handlePointerUp = () => {
+                    if (!isSelecting || isGameOver) return;
+                    isSelecting = false;
+                    const selection = getSelectionCoords();
+                    checkSelection(selection);
+                    startCell = null;
+                    endCell = null;
+                };
+
+                container.addEventListener('pointerdown', handlePointerDown);
+                window.addEventListener('pointermove', handlePointerMove);
+                window.addEventListener('pointerup', handlePointerUp);
+                window.addEventListener('pointercancel', handlePointerUp);
+            }
+
+            return {
+                init: () => {
+                    foundWords.clear();
+                    wordList = [...wordCategories[currentCategory]];
+                    initializeGrid();
+                    renderGrid();
+                    renderWordList();
+                    setupPointerEvents();
+                }
+            };
+        }
+
+        let p1Game, p2Game;
+
+        function triggerWin(playerKey) {
+            isGameOver = true;
+            playSound('win');
+            startConfetti();
+
+            const modal = document.getElementById('victory-modal');
+            const title = document.getElementById('winner-title');
+            const sub = document.getElementById('winner-sub');
+
+            if (playerKey === 'p1') {
+                title.textContent = 'PEMAIN 1 MENANG! 🏆';
+                title.className = 'text-3xl sm:text-4xl font-black text-sky-400 mb-2 uppercase tracking-tight';
+                sub.textContent = 'Tim Biru menyelesaikan pencarian kata terlebih dahulu!';
+            } else {
+                title.textContent = 'PEMAIN 2 MENANG! 🏆';
+                title.className = 'text-3xl sm:text-4xl font-black text-rose-400 mb-2 uppercase tracking-tight';
+                sub.textContent = 'Tim Merah menyelesaikan pencarian kata terlebih dahulu!';
+            }
+
+            modal.classList.remove('hidden');
+        }
+
+        // --- Confetti Effect Generator ---
+        function startConfetti() {
+            const canvas = document.getElementById('confetti-canvas');
+            const ctx = canvas.getContext('2d');
+            canvas.width = window.innerWidth;
+            canvas.height = window.innerHeight;
+
+            const particles = [];
+            const colors = ['#38bdf8', '#fb7185', '#34d399', '#fbbf24', '#a78bfa'];
+
+            for (let i = 0; i < 120; i++) {
+                particles.push({
+                    x: Math.random() * canvas.width,
+                    y: Math.random() * canvas.height - canvas.height,
+                    size: Math.random() * 8 + 4,
+                    color: colors[Math.floor(Math.random() * colors.length)],
+                    vy: Math.random() * 3 + 2,
+                    vx: Math.random() * 2 - 1,
+                    rot: Math.random() * 360
+                });
+            }
+
+            let animationFrame;
+            function render() {
+                ctx.clearRect(0, 0, canvas.width, canvas.height);
+                particles.forEach(p => {
+                    p.y += p.vy;
+                    p.x += p.vx;
+                    ctx.save();
+                    ctx.translate(p.x, p.y);
+                    ctx.rotate((p.rot * Math.PI) / 180);
+                    ctx.fillStyle = p.color;
+                    ctx.fillRect(-p.size / 2, -p.size / 2, p.size, p.size);
+                    ctx.restore();
+                });
+
+                if (particles.some(p => p.y < canvas.height)) {
+                    animationFrame = requestAnimationFrame(render);
+                } else {
+                    ctx.clearRect(0, 0, canvas.width, canvas.height);
+                }
+            }
+            render();
+        }
+
+        // --- Fullscreen and Modals ---
+        function toggleFullscreen() {
+            const elem = document.documentElement;
+            const fsText = document.getElementById('fs-text');
+            if (!document.fullscreenElement) {
+                if (elem.requestFullscreen) elem.requestFullscreen();
+                if (fsText) fsText.innerText = "Keluar Layar Penuh";
+            } else {
+                if (document.exitFullscreen) document.exitFullscreen();
+                if (fsText) fsText.innerText = "Layar Penuh";
+            }
+        }
+
+        function openResetModal() {
+            document.getElementById('reset-modal').classList.remove('hidden');
+        }
+
+        function closeResetModal() {
+            document.getElementById('reset-modal').classList.add('hidden');
+        }
+
+        function confirmReset() {
+            closeResetModal();
+            resetGame();
+        }
+
+        function resetGame() {
+            isGameOver = false;
+            document.getElementById('victory-modal').classList.add('hidden');
+            
+            p1Game = createGameInstance('p1', 'p1-grid-container', 'p1-word-list', 'p1-score');
+            p2Game = createGameInstance('p2', 'p2-grid-container', 'p2-word-list', 'p2-score');
+
+            p1Game.init();
+            p2Game.init();
+        }
+
+        window.onload = resetGame;
+    </script>
+</body>
+</html>
